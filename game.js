@@ -23,11 +23,23 @@ class Game {
         this.replayFrame = 0;
         this.smokeParticles = [];
 
+        this.currentMission = 0;
+        this.unlockedMissions = parseInt(localStorage.getItem('brrt_progress')) || 1;
+        this.missions = [
+            { id: 1, name: "Alpha Scramble", desc: "2v1: Basic intercept training.", enemies: ["MiG-29"], players: ["F-22 Raptor", "F-22 Raptor"], terrain: 1 },
+            { id: 2, name: "Iron Gate", desc: "2v2: Border patrol engagement.", enemies: ["MiG-29", "MiG-29"], players: ["F-22 Raptor", "F-22 Raptor"], terrain: 2 },
+            { id: 3, name: "Triple Threat", desc: "2v3: Breaking through enemy lines.", enemies: ["MiG-29", "MiG-29", "MiG-29"], players: ["F-22 Raptor", "A-10 Warthog"], terrain: 2 },
+            { id: 4, name: "Lone Survivor", desc: "1v2: Solo mission in hostile space.", enemies: ["Su-57", "Su-57"], players: ["F-22 Raptor"], terrain: 3 },
+            { id: 5, name: "Heavy Metal", desc: "3v4: Squadron-level dogfight.", enemies: ["MiG-29", "MiG-29", "Su-57", "Su-57"], players: ["F-22 Raptor", "F-22 Raptor", "A-10 Warthog"], terrain: 2 },
+            { id: 6, name: "Endgame", desc: "3v5: Ultimate air superiority test.", enemies: ["Su-57", "Su-57", "Su-57", "MiG-29", "MiG-29"], players: ["F-22 Raptor", "F-22 Raptor", "F-22 Raptor"], terrain: 3 },
+            { id: 7, name: "SECRET: All-Out War", desc: "10v10: Total mobilization. Massive battlefield.", enemies: ["Su-57","Su-57","Su-57","Su-57","Su-57","MiG-29","MiG-29","MiG-29","MiG-29","MiG-29"], players: ["F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor","F-22 Raptor"], terrain: 10 }
+        ];
+
         this.init();
         this.bindEvents();
-
-        console.log("BRRT: Tactical Command System Online.");
-        this.lastTime = 0;
+        this.showMenu();
+        
+        this.lastTime = performance.now();
         requestAnimationFrame(this.loop.bind(this));
     }
 
@@ -37,6 +49,14 @@ class Game {
         this.flares = [];
         this.mountains = [];
         this.logMsg("AWACS: Picture clear. You are cleared to engage.", "log-system");
+
+        // Player Planes
+        this.planes.push(new Plane(300, 700, 'player', "A-10 Warthog"));
+        this.planes.push(new Plane(500, 700, 'player', "F-22 Raptor"));
+
+        // Enemy Planes
+        this.planes.push(new Plane(300, 100, 'enemy', "MiG-29"));
+        this.planes.push(new Plane(500, 100, 'enemy', "Su-57"));
 
         // Random Mountains with big gaps
         let numMountains = 2 + Math.floor(Math.random() * 2); // 2 or 3 mountains
@@ -57,19 +77,19 @@ class Game {
                     }
                 }
                 if (valid) {
+                    for (let p of this.planes) {
+                        if (dist(mx, my, p.x, p.y) < mr + 200) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                if (valid) {
                     this.mountains.push(new Mountain(mx, my, mr));
                     placed = true;
                 }
             }
         }
-
-        // Player Planes
-        this.planes.push(new Plane(300, 700, 'player', "A-10 Warthog"));
-        this.planes.push(new Plane(500, 700, 'player', "F-22 Raptor"));
-
-        // Enemy Planes
-        this.planes.push(new Plane(300, 100, 'enemy', "MiG-29"));
-        this.planes.push(new Plane(500, 100, 'enemy', "Su-57"));
 
         this.gameState = 'planning';
         this.selectedPlane = null;
@@ -87,12 +107,41 @@ class Game {
             if (this.gameState === 'planning') this.startActionPhase();
         });
 
-        document.getElementById('btn-restart').addEventListener('click', () => this.init());
-
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            this.loadMission(this.currentMission);
+        });
+        
         document.getElementById('btn-replay').addEventListener('click', () => {
             if (this.gameState === 'planning' && this.recordedFrames.length > 0) {
                 this.startReplay();
             }
+        });
+
+        document.getElementById('btn-tutorial').addEventListener('click', () => {
+            document.getElementById('tutorial-overlay').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-close-tutorial').addEventListener('click', () => {
+            document.getElementById('tutorial-overlay').classList.add('hidden');
+        });
+
+        document.getElementById('btn-quit').addEventListener('click', () => {
+            this.showMenu();
+        });
+
+        document.getElementById('btn-return-menu').addEventListener('click', () => {
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            this.showMenu();
+        });
+
+        // Difficulty selector
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.ai.difficulty = btn.dataset.diff;
+            });
         });
 
         // UI Listeners
@@ -302,6 +351,7 @@ class Game {
             }
         }
 
+        // Impossible AI plans AFTER the player so it can read their moves
         this.ai.planTurn();
 
         this.gameState = 'action_phase';
@@ -480,10 +530,10 @@ class Game {
                             if (d <= p.cannonRange) {
                                 let angleToPt = Math.atan2(e.y - p.y, e.x - p.x);
                                 let aDiff = Math.abs(normalizeAngle(angleToPt - p.heading));
-                                if (d * Math.sin(aDiff) <= e.radius * 1.5 && aDiff < Math.PI / 2) {
+                                if (d * Math.sin(aDiff) <= e.radius * 3 && aDiff < Math.PI / 2) {
                                     let blocked = false;
                                     for (let mt of this.mountains) {
-                                        let steps = Math.ceil(d / 10);
+                                        let steps = Math.ceil(d / 15);
                                         for (let i = 0; i <= steps; i++) {
                                             if (mt.containsPoint(p.x + (e.x - p.x) * (i / steps), p.y + (e.y - p.y) * (i / steps))) {
                                                 blocked = true;
@@ -539,6 +589,18 @@ class Game {
             let moveStep = (m.speed / this.actionDuration);
             m.x += Math.cos(m.heading) * moveStep;
             m.y += Math.sin(m.heading) * moveStep;
+
+            for (let mt of this.mountains) {
+                if (mt.containsPoint(m.x, m.y)) {
+                    m.hasHit = true;
+                    m.isDestroyed = true;
+                    this.addAnimation({ type: 'explosion', x: m.x, y: m.y, life: 20, maxLife: 20 });
+                    this.logMsg("Missile impacted terrain.", 'log-system');
+                    break;
+                }
+            }
+
+            if (m.hasHit) continue;
 
             for (let pl of this.planes) {
                 if (pl.isDestroyed || pl.team === m.team) continue;
@@ -609,13 +671,17 @@ class Game {
     checkWinCondition() {
         let playersAlive = this.planes.filter(p => p.team === 'player' && !p.isDestroyed).length;
         let enemiesAlive = this.planes.filter(p => p.team === 'enemy' && !p.isDestroyed).length;
-
+        
         if (playersAlive === 0 || enemiesAlive === 0) {
             this.gameState = 'game_over';
             const overlay = document.getElementById('game-over-overlay');
             overlay.classList.remove('hidden');
-
-            if (playersAlive === 0) {
+            
+            if (playersAlive === 0 && enemiesAlive === 0) {
+                document.getElementById('game-over-title').innerText = "MUTUAL DESTRUCTION";
+                document.getElementById('game-over-title').style.color = "var(--accent-warning)";
+                document.getElementById('game-over-message').innerText = "Both sides wiped out in the crossfire. A tactical draw.";
+            } else if (playersAlive === 0) {
                 document.getElementById('game-over-title').innerText = "MISSION FAILED";
                 document.getElementById('game-over-title').style.color = "var(--accent-enemy)";
                 document.getElementById('game-over-message').innerText = "All friendly forces destroyed.";
@@ -623,8 +689,120 @@ class Game {
                 document.getElementById('game-over-title').innerText = "MISSION ACCOMPLISHED";
                 document.getElementById('game-over-title').style.color = "var(--accent-player)";
                 document.getElementById('game-over-message').innerText = "Air superiority achieved.";
+                
+                // Unlock next mission
+                if (this.currentMission >= this.unlockedMissions) {
+                    this.unlockedMissions = Math.min(7, this.currentMission + 1);
+                    localStorage.setItem('brrt_progress', this.unlockedMissions);
+                }
             }
         }
+    }
+
+    showMenu() {
+        this.gameState = 'menu';
+        document.getElementById('menu-overlay').classList.remove('hidden');
+        const list = document.getElementById('mission-list');
+        list.innerHTML = '';
+        
+        this.missions.forEach(m => {
+            const card = document.createElement('div');
+            card.className = `mission-card ${m.id > this.unlockedMissions ? 'locked' : ''}`;
+            card.innerHTML = `
+                <h3>Mission ${m.id}: ${m.name}</h3>
+                <p>${m.desc}</p>
+                <div class="status">${m.id > this.unlockedMissions ? 'Locked' : 'Available'}</div>
+            `;
+            if (m.id <= this.unlockedMissions) {
+                card.addEventListener('click', () => {
+                    document.getElementById('menu-overlay').classList.add('hidden');
+                    this.loadMission(m.id);
+                });
+            }
+            list.appendChild(card);
+        });
+
+        if (this.unlockedMissions === 1) {
+            this.logMsg("System initialized. Select Training Day to begin.", "log-system");
+        }
+    }
+
+    loadMission(id) {
+        console.log(`Loading Mission ${id}...`);
+        this.currentMission = id;
+        const m = this.missions.find(mi => mi.id === id);
+        if (!m) {
+            console.error("Mission not found:", id);
+            return;
+        }
+
+        // Special handling for Secret Mission (Larger Map)
+        if (id === 7) {
+            this.canvas.width = 1200;
+            this.canvas.height = 1200;
+        } else {
+            this.canvas.width = 800;
+            this.canvas.height = 800;
+        }
+        
+        // Reset state manually instead of calling full init()
+        this.planes = []; 
+        this.missiles = [];
+        this.flares = [];
+        this.mountains = [];
+        this.recordedFrames = [];
+        this.animations = [];
+        this.isReplaying = false;
+        this.actionPhaseProgress = 0;
+        
+        // Load players (centered)
+        let playerStartX = (this.canvas.width / 2) - ((m.players.length - 1) * 50);
+        m.players.forEach((pType, i) => {
+            this.planes.push(new Plane(playerStartX + (i * 100), this.canvas.height - 100, 'player', pType));
+        });
+        
+        // Load enemies (centered)
+        let enemyStartX = (this.canvas.width / 2) - ((m.enemies.length - 1) * 50);
+        m.enemies.forEach((eType, i) => {
+            this.planes.push(new Plane(enemyStartX + (i * 100), 100, 'enemy', eType));
+        });
+
+        // Load terrain
+        this.mountains = [];
+        for (let i = 0; i < m.terrain; i++) {
+            let placed = false;
+            let attempts = 0;
+            while (!placed && attempts < 50) {
+                attempts++;
+                let mx = 100 + Math.random() * (this.canvas.width - 200); 
+                let my = 100 + Math.random() * (this.canvas.height - 200); 
+                let mr = 40 + Math.random() * 30;
+
+                let valid = true;
+                for (let existing of this.mountains) {
+                    if (dist(mx, my, existing.x, existing.y) < existing.radius + mr + 120) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    for (let p of this.planes) {
+                        if (dist(mx, my, p.x, p.y) < mr + 200) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                if (valid) {
+                    this.mountains.push(new Mountain(mx, my, mr));
+                    placed = true;
+                }
+            }
+        }
+
+        this.logMsg(`Mission Started: ${m.name}`, 'log-system');
+        this.gameState = 'planning';
+        this.updateUI();
     }
 
     logMsg(msg, className) {
@@ -655,6 +833,141 @@ class Game {
             let anim = this.animations[i];
             anim.life--;
             if (anim.life <= 0) this.animations.splice(i, 1);
+        }
+    }
+
+    drawPlaneShape(ctx, plane, isSelected, gameState, isReplaying) {
+        let r = plane.radius;
+        let hpPct = plane.hp / plane.maxHp;
+        
+        ctx.beginPath();
+        if (plane.type === "F-22 Raptor") {
+            ctx.moveTo(r, 0);
+            ctx.lineTo(r*0.6, r*0.2);
+            ctx.lineTo(r*0.2, r*0.3);
+            ctx.lineTo(-r*0.3, r*0.9);
+            ctx.lineTo(-r*0.6, r*0.3);
+            ctx.lineTo(-r*0.9, r*0.5);
+            ctx.lineTo(-r*0.8, 0);
+            ctx.lineTo(-r*0.9, -r*0.5);
+            ctx.lineTo(-r*0.6, -r*0.3);
+            ctx.lineTo(-r*0.3, -r*0.9);
+            ctx.lineTo(r*0.2, -r*0.3);
+            ctx.lineTo(r*0.6, -r*0.2);
+        } else if (plane.type === "A-10 Warthog") {
+            ctx.moveTo(r*0.8, 0);
+            ctx.lineTo(r*0.6, r*0.2);
+            ctx.lineTo(r*0.4, r*0.2);
+            ctx.lineTo(r*0.2, r*0.9);
+            ctx.lineTo(-r*0.1, r*0.9);
+            ctx.lineTo(-r*0.1, r*0.3);
+            ctx.lineTo(-r*0.4, r*0.3);
+            ctx.lineTo(-r*0.7, r*0.4);
+            ctx.lineTo(-r*0.9, r*0.4);
+            ctx.lineTo(-r*0.9, 0);
+            ctx.lineTo(-r*0.9, -r*0.4);
+            ctx.lineTo(-r*0.7, -r*0.4);
+            ctx.lineTo(-r*0.4, -r*0.3);
+            ctx.lineTo(-r*0.1, -r*0.3);
+            ctx.lineTo(-r*0.1, -r*0.9);
+            ctx.lineTo(r*0.2, -r*0.9);
+            ctx.lineTo(r*0.4, -r*0.2);
+            ctx.lineTo(r*0.6, -r*0.2);
+        } else if (plane.type === "MiG-29") {
+            ctx.moveTo(r, 0);
+            ctx.lineTo(r*0.5, r*0.1);
+            ctx.lineTo(r*0.1, r*0.4);
+            ctx.lineTo(-r*0.4, r*0.8);
+            ctx.lineTo(-r*0.6, r*0.4); 
+            ctx.lineTo(-r*0.9, r*0.4);
+            ctx.lineTo(-r*0.8, 0);
+            ctx.lineTo(-r*0.9, -r*0.4);
+            ctx.lineTo(-r*0.6, -r*0.4);
+            ctx.lineTo(-r*0.4, -r*0.8);
+            ctx.lineTo(r*0.1, -r*0.4);
+            ctx.lineTo(r*0.5, -r*0.1);
+        } else if (plane.type === "Su-57") {
+            ctx.moveTo(r, 0);
+            ctx.lineTo(r*0.4, r*0.2);
+            ctx.lineTo(0, r*0.4);
+            ctx.lineTo(-r*0.4, r*0.9);
+            ctx.lineTo(-r*0.7, r*0.5);
+            ctx.lineTo(-r*0.9, r*0.6);
+            ctx.lineTo(-r*0.8, 0);
+            ctx.lineTo(-r*0.9, -r*0.6);
+            ctx.lineTo(-r*0.7, -r*0.5);
+            ctx.lineTo(-r*0.4, -r*0.9);
+            ctx.lineTo(0, -r*0.4);
+            ctx.lineTo(r*0.4, -r*0.2);
+        } else {
+            ctx.moveTo(r, 0);
+            ctx.lineTo(-r, r);
+            ctx.lineTo(-r * 0.5, 0);
+            ctx.lineTo(-r, -r);
+        }
+        ctx.closePath();
+
+        let baseColor = plane.team === 'player' ? '#38bdf8' : '#ef4444';
+        
+        if (hpPct < 0.5) {
+            baseColor = plane.team === 'player' ? '#0284c7' : '#991b1b';
+        }
+
+        ctx.fillStyle = baseColor;
+
+        if (plane === isSelected && gameState === 'planning' && !isReplaying) {
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 15;
+        }
+
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        
+        if (hpPct < 0.25) {
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = '#fca5a5';
+        }
+        
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        if (plane.type === "A-10 Warthog") {
+            ctx.arc(r*0.5, 0, r*0.2, 0, Math.PI*2);
+        } else {
+            ctx.ellipse(r*0.3, 0, r*0.3, r*0.1, 0, 0, Math.PI*2);
+        }
+        ctx.fillStyle = '#0f172a';
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.stroke();
+
+        if (hpPct < 0.25) {
+            ctx.beginPath();
+            ctx.moveTo(-r*0.6, 0);
+            ctx.lineTo(-r*1.2, r*0.2);
+            ctx.lineTo(-r*0.9, 0);
+            ctx.lineTo(-r*1.2, -r*0.2);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(249, 115, 22, 0.8)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(0, r*0.4, r*0.2, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(-r*0.3, -r*0.5, r*0.2, 0, Math.PI*2);
+            ctx.fill();
+        } else if (hpPct < 0.5) {
+            ctx.beginPath();
+            ctx.arc(0, r*0.3, r*0.2, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.fill();
         }
     }
 
@@ -850,24 +1163,7 @@ class Game {
             this.ctx.translate(plane.x, plane.y);
             this.ctx.rotate(plane.heading);
 
-            this.ctx.beginPath();
-            this.ctx.moveTo(plane.radius, 0);
-            this.ctx.lineTo(-plane.radius, plane.radius);
-            this.ctx.lineTo(-plane.radius * 0.5, 0);
-            this.ctx.lineTo(-plane.radius, -plane.radius);
-            this.ctx.closePath();
-
-            this.ctx.fillStyle = plane.team === 'player' ? '#38bdf8' : '#ef4444';
-
-            if (plane === this.selectedPlane && this.gameState === 'planning' && !this.isReplaying) {
-                this.ctx.shadowColor = this.ctx.fillStyle;
-                this.ctx.shadowBlur = 15;
-            }
-
-            this.ctx.fill();
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeStyle = '#fff';
-            this.ctx.stroke();
+            this.drawPlaneShape(this.ctx, plane, this.selectedPlane, this.gameState, this.isReplaying);
             this.ctx.restore();
 
             let barW = 30;
