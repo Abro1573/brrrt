@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BRRT: Tactical Air Combat</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Share+Tech+Mono&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div id="game-container">
         <!-- Sidebar HUD -->
@@ -15,46 +18,59 @@
             <div class="turn-indicator" id="turn-indicator">
                 <span class="player-turn active">PLANNING PHASE</span>
             </div>
-            
+
             <div id="unit-info" class="hidden">
                 <h2 id="ui-unit-name">A-10 Warthog</h2>
                 <div class="stat-row">
                     <span>HP</span>
-                    <div class="bar-container"><div id="ui-hp-bar" class="bar-fill hp-fill"></div></div>
+                    <div class="bar-container">
+                        <div id="ui-hp-bar" class="bar-fill hp-fill"></div>
+                    </div>
                     <span id="ui-hp-val">100/100</span>
                 </div>
                 <div class="stat-row">
                     <span>NRG</span>
-                    <div class="bar-container"><div id="ui-energy-bar" class="bar-fill energy-fill"></div></div>
+                    <div class="bar-container">
+                        <div id="ui-energy-bar" class="bar-fill energy-fill"></div>
+                    </div>
                     <span id="ui-energy-val">2/2</span>
                 </div>
-                
+
                 <div class="controls-section">
                     <h3>Flight Action</h3>
                     <div class="radio-group" id="flight-actions">
-                        <label class="radio-label"><input type="radio" name="flight" value="level" checked> Level (0)</label>
-                        <label class="radio-label"><input type="radio" name="flight" value="recover"> Recover (+1)</label>
-                        <label class="radio-label"><input type="radio" name="flight" value="maneuver"> Maneuver (-1)</label>
+                        <label class="radio-label"><input type="radio" name="flight" value="level" checked> Level
+                            (0)</label>
+                        <label class="radio-label"><input type="radio" name="flight" value="recover"> Recover
+                            (+1)</label>
+                        <label class="radio-label"><input type="radio" name="flight" value="maneuver"> Maneuver
+                            (-1)</label>
                         <label class="radio-label"><input type="radio" name="flight" value="boost"> Boost (-1)</label>
-                        <label class="radio-label"><input type="radio" name="flight" value="turnaround"> Turnaround (-2)</label>
+                        <label class="radio-label"><input type="radio" name="flight" value="turnaround"> Turnaround
+                            (-2)</label>
                     </div>
                 </div>
 
                 <div class="controls-section">
                     <h3>Weapon Systems</h3>
                     <div class="radio-group" id="weapon-systems">
-                        <label class="radio-label"><input type="radio" name="weapon" value="cannons" checked> Cannons (Auto)</label>
-                        <label class="radio-label"><input type="radio" name="weapon" value="missile"> Missile (<span id="ui-ammo-missile">2</span>)</label>
-                        <label class="radio-label"><input type="radio" name="weapon" value="flares"> Flares (<span id="ui-ammo-flares">3</span>)</label>
+                        <label class="radio-label"><input type="radio" name="weapon" value="cannons" checked> Cannons
+                            (Auto)</label>
+                        <label class="radio-label"><input type="radio" name="weapon" value="missile"> Missile (<span
+                                id="ui-ammo-missile">2</span>)</label>
+                        <label class="radio-label"><input type="radio" name="weapon" value="flares"> Flares (<span
+                                id="ui-ammo-flares">3</span>)</label>
                     </div>
                 </div>
-                
+
                 <p id="context-hint" class="hint-text">Click within movement cone to set waypoint.</p>
             </div>
-            
+
             <div class="game-controls">
                 <button id="btn-commit-turn" class="primary-btn">Commit Turn</button>
+                <button id="btn-tutorial" class="secondary-btn">Flight Manual</button>
                 <button id="btn-replay" class="secondary-btn hidden">Watch Replay</button>
+                <button id="btn-quit" class="secondary-btn">Quit to Menu</button>
             </div>
         </div>
 
@@ -63,7 +79,7 @@
             <canvas id="gameCanvas" width="800" height="800"></canvas>
             <div id="combat-text-container"></div>
         </div>
-        
+
         <!-- Right Panel -->
         <div id="hud-right" class="hud-panel glass-panel">
             <h2>Combat Log</h2>
@@ -72,13 +88,50 @@
                 <p>Commander, plan your squadron's maneuvers.</p>
             </div>
         </div>
-        
+
         <!-- Game Over overlay -->
+        <!-- Main Menu Overlay -->
+        <div id="menu-overlay" class="overlay">
+            <div class="overlay-content">
+                <h1>BRRT</h1>
+                <p>Tactical Air Combat Simulator</p>
+                <div id="difficulty-selector" class="difficulty-bar">
+                    <span class="diff-label">AI DIFFICULTY:</span>
+                    <button class="diff-btn" data-diff="easy">Easy</button>
+                    <button class="diff-btn active" data-diff="basic">Basic</button>
+                    <button class="diff-btn" data-diff="expert">Expert</button>
+                    <button class="diff-btn" data-diff="impossible">Impossible</button>
+                </div>
+                <div id="mission-list" class="mission-grid">
+                    <!-- Missions injected by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Tutorial Overlay -->
+        <div id="tutorial-overlay" class="overlay hidden">
+            <div class="overlay-content tutorial-content glass-panel">
+                <h2>Flight Manual</h2>
+                <div class="tutorial-grid">
+                    <div class="tut-item"><h3>Level</h3><p>Standard move. 0 Energy.</p></div>
+                    <div class="tut-item"><h3>Boost</h3><p>High speed. 1 Energy.</p></div>
+                    <div class="tut-item"><h3>Maneuver</h3><p>+60% Dodge. 1 Energy.</p></div>
+                    <div class="tut-item"><h3>Recover</h3><p>+1 Energy. Short move.</p></div>
+                    <div class="tut-item"><h3>Turnaround</h3><p>180° turn. 2 Energy.</p></div>
+                    <div class="tut-item"><h3>Cannons</h3><p>Auto-fire in front arc.</p></div>
+                    <div class="tut-item"><h3>Missiles</h3><p>Locked tracking. 2 Ammo.</p></div>
+                    <div class="tut-item"><h3>Flares</h3><p>Decoy for missiles. 3 Ammo.</p></div>
+                </div>
+                <button id="btn-close-tutorial" class="primary-btn" style="margin-top:20px">Close Manual</button>
+            </div>
+        </div>
+
         <div id="game-over-overlay" class="overlay hidden">
             <div class="overlay-content glass-panel">
-                <h1 id="game-over-title">MISSION ACCOMPLISHED</h1>
+                <h1 id="game-over-title">MISSION COMPLETE</h1>
                 <p id="game-over-message">All enemy forces neutralized.</p>
-                <button id="btn-restart" class="primary-btn">Restart Mission</button>
+                <button id="btn-restart" class="primary-btn">Try Again</button>
+                <button id="btn-return-menu" class="secondary-btn" style="margin-top:10px">Return to Menu</button>
             </div>
         </div>
     </div>
@@ -87,4 +140,5 @@
     <script src="ai.js"></script>
     <script src="game.js"></script>
 </body>
+
 </html>
