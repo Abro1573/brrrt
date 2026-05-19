@@ -28,7 +28,7 @@ class Plane {
         
         this.heading = team === 'player' ? -Math.PI/2 : Math.PI/2; 
         
-        this.radius = 15; 
+        this.radius = 22; 
         this.baseMoveDist = 150; 
         this.turnCone = Math.PI / 3; 
         
@@ -73,6 +73,7 @@ class Plane {
         
         if (flight === 'boost') maxDist *= 1.4;
         if (flight === 'recover') maxDist *= 0.5;
+        if (flight === 'maneuver') { maxDist *= 0.75; turnAngle *= 1.4; }
         if (flight === 'turnaround') turnAngle = 0; 
         
         return { minDist: 40, maxDist, turnAngle };
